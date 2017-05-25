@@ -11,6 +11,12 @@ const SERVICE_UUID = "8a61d7f7-888e-4e72-93be-0df87152fc6d";
 const CHARACTERISTIC_UUID = "fae2e24f-aea2-48cb-b449-55ec20518e93";
 
 /**
+ * 扱うセンサー値の上限です。
+ * @type {number}
+ */
+const SENSORE_MAX_VALUE = 160;
+
+/**
  * アルコールセンサーのキャラクタリスティックです。
  */
 let sensoreCharacteristic;
@@ -21,14 +27,14 @@ let sensoreCharacteristic;
 let connectButton;
 
 /**
- * センサー値を表示するDOMです。
+ * ビール全体のDOMです。
  */
-let mainView;
+let beerMain;
 
 /**
- * アルコール値を表示するDOMです。
+ * ビールグラスのDOMです。
  */
-let sensorText;
+let beerMask;
 
 /**
  * ローディングボタンです。
@@ -36,14 +42,50 @@ let sensorText;
 let loading;
 
 /**
+ * BLE経由で読み込んだセンサー値です。
+ */
+let sensorValue;
+
+/**
+ * ビールグラスの表示率です。
+ */
+let beerPer;
+
+/**
+ * BLE接続が成功したかどうか
+ */
+let isConnected;
+
+/**
  * 初期化処理です。
  */
 function init() {
+  // beerの拡大率を算出
+  let designWidth = 458;
+  let designHeight = 755;
+  let margin = 40;
+  let windowW = window.innerWidth - margin;
+  let windowH = window.innerHeight - margin;
+
+  if (windowW < windowH && windowW / designWidth * designHeight < windowH) {
+    this.wrapperScale = windowW / designWidth;
+  }
+  else {
+    this.wrapperScale = windowH / designHeight;
+  }
+
+  let beerMainInner = document.querySelector("#beer-main-inner");
+  beerMainInner.style.transform = "scale(" + this.wrapperScale + ")";
+
+  sensorValue = 0;
+  beerPer = 0;
+  isConnected = false;
+
   connectButton = document.querySelector("#ble-connect-button");
   connectButton.addEventListener("click", connectBLE);
 
-  mainView = document.querySelector("#main-view");
-  sensorText = document.querySelector("#humidity-text");
+  beerMain = document.querySelector("#beer-main");
+  beerMask = document.querySelector("#beer-mask");
 
   loading = document.querySelector("#loading");
 }
@@ -92,6 +134,8 @@ function connectBLE() {
       // センサーの値を読み込みます。
       loadSensorValue();
 
+      // ビール更新
+      loop();
     })
     .catch(error => {
       console.log("Error : " + error);
@@ -107,17 +151,11 @@ function connectBLE() {
 function loadSensorValue() {
   // 1秒ごとにセンサーの値を取得
   setInterval(function () {
-    let humidity;
-
     // アルコール値を読み込む
     sensoreCharacteristic.readValue()
       .then(value => {
         // アルコール値を取得
-        humidity = value.getUint8(0);
-        console.log(humidity);
-
-        // アルコール値の表示を更新
-        sensorText.innerHTML = humidity;
+        sensorValue = value.getUint8(0);
 
         // アルコール値を表示
         showMainView();
@@ -125,22 +163,32 @@ function loadSensorValue() {
       .catch(error => {
         console.log("Error : " + error);
       });
+  }, 300);
+}
 
-  }, 500);
+function loop() {
+  beerPer += (sensorValue / SENSORE_MAX_VALUE * 100 - beerPer) * 0.1;
+  beerMask.style.height = beerPer + "%";
+
+  window.requestAnimationFrame(loop);
 }
 
 /**
  * アルコール値を表示します。
  */
 function showMainView() {
+  if (isConnected) {
+    return;
+  }
+
   // 接続ボタン
   connectButton.className = "hide";
-
   // loading非表示
   loading.className = "hide";
-
   // アルコール値表示
-  mainView.className = "show";
+  beerMain.className = "show";
+
+  isConnected = true;
 }
 
 window.addEventListener("load", init);
